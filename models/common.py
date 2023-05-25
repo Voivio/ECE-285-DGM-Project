@@ -1,7 +1,8 @@
 import torch
-from torch.nn import Module, Linear
+from torch.nn import Module, Linear,Sequential,ReLU
 from torch.optim.lr_scheduler import LambdaLR
 import numpy as np
+import torch.nn.functional as F
 
 def reparameterize_gaussian(mean, logvar):
     std = torch.exp(0.5 * logvar)
@@ -50,7 +51,21 @@ class ConcatSquashLinear(Module):
         ret = self._layer(x) * gate + bias
         return ret
 
+class CustomLayer(Module):
+    def __init__(self, dim_in, dim_out, dim_ctx):
+        super(CustomLayer, self).__init__()
+        self.layer = Sequential(
+            Linear(dim_in, dim_out),
+            ReLU()
+        )
+        self.hyper_bias = Linear(dim_ctx, dim_out, bias=False)
+        self.hyper_gate = Linear(dim_ctx, dim_out)
 
+    def forward(self, ctx, x):
+        gate = torch.sigmoid(self.hyper_gate(ctx))
+        bias = self.hyper_bias(ctx)
+        ret = self.layer(x) * gate + bias
+        return ret
 def get_linear_scheduler(optimizer, start_epoch, end_epoch, start_lr, end_lr):
     def lr_func(epoch):
         if epoch <= start_epoch:
