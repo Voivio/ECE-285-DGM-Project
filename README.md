@@ -17,7 +17,7 @@ onda activate ddpm
 
 ### Dataset
 
-The [ShapeNet](https://shapenet.org/) dataset can be downloaded from Google Drive using the link [here]().
+The [ShapeNet](https://shapenet.org/) dataset can be downloaded from Google Drive using the link [here](https://drive.google.com/file/d/1I7iinoG8K64U27inCy7Lk7R0ZDsd21r7/view?usp=sharing) and [here](https://drive.google.com/file/d/1WOcTkrTDONrGvizN3TNyuRlkGp9OlX7-/view?usp=sharing).
 
 ### Checkpoints
 
