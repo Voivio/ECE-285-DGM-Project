@@ -9,19 +9,96 @@ from sklearn.neighbors import NearestNeighbors
 from numpy.linalg import norm
 from tqdm.auto import tqdm
 
+# _EMD_NOT_IMPL_WARNED = False
+# def emd_approx(sample, ref):
+#     global _EMD_NOT_IMPL_WARNED
+#     emd = torch.zeros([sample.size(0)]).to(sample)
+#     if not _EMD_NOT_IMPL_WARNED:
+#         _EMD_NOT_IMPL_WARNED = True
+#         print('\n\n[WARNING]')
+#         print('  * EMD is not implemented due to GPU compatability issue.')
+#         print('  * We will set all EMD to zero by default.')
+#         print('  * You may implement your own EMD in the function `emd_approx` in ./evaluation/evaluation_metrics.py')
+#         print('\n')
+#     return emd
 
-_EMD_NOT_IMPL_WARNED = False
-def emd_approx(sample, ref):
-    global _EMD_NOT_IMPL_WARNED
-    emd = torch.zeros([sample.size(0)]).to(sample)
-    if not _EMD_NOT_IMPL_WARNED:
-        _EMD_NOT_IMPL_WARNED = True
-        print('\n\n[WARNING]')
-        print('  * EMD is not implemented due to GPU compatability issue.')
-        print('  * We will set all EMD to zero by default.')
-        print('  * You may implement your own EMD in the function `emd_approx` in ./evaluation/evaluation_metrics.py')
-        print('\n')
-    return emd
+def M(C, u, v, reg):
+    "Modified cost for logarithmic updates"
+    "$M_{ij} = (-c_{ij} + u_i + v_j) / \epsilon$"
+    return (-C + u.unsqueeze(1) + v.unsqueeze(0)) / reg
+
+def lse(A):
+    "log-sum-exp"
+    return torch.log(torch.exp(A).sum(1, keepdim=True) + 1e-6)  # add 10^-6 to prevent NaN
+
+
+def sinkhorn(dist_mat, reg, num_iters=100):
+    """
+    Run the Sinkhorn algorithm.
+    
+    Args:
+    - dist_mat (torch.Tensor): The distance matrix. shape=(n_samples, n_samples)
+    - reg (float): The regularization term.
+    - num_iters (int): Number of iterations to run the algorithm.
+
+    Returns:
+    - P (torch.Tensor): The optimal transport matrix.
+    """
+    n_samples = dist_mat.shape[0]
+
+    mu = 1. / n_samples * torch.FloatTensor(n_samples).fill_(1).to(dist_mat)
+    nu = 1. / n_samples * torch.FloatTensor(n_samples).fill_(1).to(dist_mat)
+    thresh = 10**(-1)  # stopping criterion
+    actual_nits = 0  # to check if algorithm terminates because of threshold or max iterations reached
+
+    u, v, err = 0. * mu, 0. * nu, 0.
+    
+    for _ in range(num_iters):
+
+        u1 = u  # useful to check the update
+        u = reg * (torch.log(mu) - lse(M(dist_mat, u, v, reg)).squeeze()) + u
+        v = reg * (torch.log(nu) - lse(M(dist_mat, u, v, reg).t()).squeeze()) + v
+
+        # v = torch.sum(K * u, dim=0)
+        # u = 1.0 / torch.matmul(K, v)
+        err = (u - u1).abs().sum()
+
+        actual_nits += 1
+        if err < thresh:
+            break
+        
+    P = torch.exp(M(dist_mat, u, v, reg))
+    
+    return P
+
+def emd_approx(sample_batch, reference_batch, reg=0.1):
+    """
+    Calculate the EMD for each pair of sample and reference examples.
+
+    Args:
+    - sample (torch.Tensor): The sample set. shape=(n_samples, n_dims)
+    - reference (torch.Tensor): The reference set. shape=(n_samples, n_dims)
+    - reg (float): The regularization term.
+
+    Returns:
+    - emd (torch.Tensor): The EMD for each pair of examples. shape=(n_samples,)
+    """
+    batch_size, n_samples, _ = sample_batch.shape
+    emd = torch.zeros((batch_size,))
+    for b in range(batch_size):
+        # Calculate the distance matrix
+        sample_exp = sample_batch[b].unsqueeze(1)
+        reference_exp = reference_batch[b].unsqueeze(0)
+        dist_mat = torch.sum((sample_exp - reference_exp)**2, dim=2)
+        # print(sample_exp.shape, reference_exp.shape, dist_mat.shape)
+
+        # Run the Sinkhorn algorithm
+        P = sinkhorn(dist_mat, reg)
+
+        # Calculate the EMD
+        emd[b] = torch.sum(P * dist_mat)
+    
+    return torch.mean(emd)
 
 
 # Borrow from https://github.com/ThibaultGROUEIX/AtlasNet
@@ -195,10 +272,10 @@ def compute_all_metrics(sample_pcs, ref_pcs, batch_size):
     })
     
     ## EMD
-    # res_emd = lgan_mmd_cov(M_rs_emd.t())
-    # results.update({
-    #     "%s-EMD" % k: v for k, v in res_emd.items()
-    # })
+    res_emd = lgan_mmd_cov(M_rs_emd.t())
+    results.update({
+        "%s-EMD" % k: v for k, v in res_emd.items()
+    })
 
     for k, v in results.items():
         print('[%s] %.8f' % (k, v.item()))
@@ -213,10 +290,10 @@ def compute_all_metrics(sample_pcs, ref_pcs, batch_size):
         "1-NN-CD-%s" % k: v for k, v in one_nn_cd_res.items() if 'acc' in k
     })
     ## EMD
-    # one_nn_emd_res = knn(M_rr_emd, M_rs_emd, M_ss_emd, 1, sqrt=False)
-    # results.update({
-    #     "1-NN-EMD-%s" % k: v for k, v in one_nn_emd_res.items() if 'acc' in k
-    # })
+    one_nn_emd_res = knn(M_rr_emd, M_rs_emd, M_ss_emd, 1, sqrt=False)
+    results.update({
+        "1-NN-EMD-%s" % k: v for k, v in one_nn_emd_res.items() if 'acc' in k
+    })
 
     return results
 

@@ -12,10 +12,23 @@ class FlowVAE(Module):
     def __init__(self, args):
         super().__init__()
         self.args = args
-        self.encoder = PointNetEncoder(args.latent_dim)
+        if args.encoder == "resnet":
+            print("using resnet encoder.")
+            self.encoder = ResNetEncoder(args.latent_dim)
+        else:
+            self.encoder = PointNetEncoder(args.latent_dim)
         self.flow = build_latent_flow(args)
+
+        
+        diffusion_net = PointwiseNet(
+            point_dim=3, 
+            context_dim=args.latent_dim, 
+            residual=args.residual, 
+            layer_type=args.diffusion_layer_type
+            )
+
         self.diffusion = DiffusionPoint(
-            net = PointwiseNet(point_dim=3, context_dim=args.latent_dim, residual=args.residual),
+            net = diffusion_net,
             var_sched = VarianceSchedule(
                 num_steps=args.num_steps,
                 beta_1=args.beta_1,

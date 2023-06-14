@@ -51,21 +51,21 @@ class ConcatSquashLinear(Module):
         ret = self._layer(x) * gate + bias
         return ret
 
-class CustomLayer(Module):
+class ConcatLinear(Module):
     def __init__(self, dim_in, dim_out, dim_ctx):
-        super(CustomLayer, self).__init__()
-        self.layer = Sequential(
-            Linear(dim_in, dim_out),
-            ReLU()
-        )
-        self.hyper_bias = Linear(dim_ctx, dim_out, bias=False)
-        self.hyper_gate = Linear(dim_ctx, dim_out)
+        super(ConcatLinear, self).__init__()
+        self.input_linear = Linear(dim_in, dim_out)
+        self.ctx_linear = Linear(dim_ctx, dim_out)
+        self.concat_linear = Linear(dim_out * 2, dim_out)
 
     def forward(self, ctx, x):
-        gate = torch.sigmoid(self.hyper_gate(ctx))
-        bias = self.hyper_bias(ctx)
-        ret = self.layer(x) * gate + bias
+        x = F.relu(self.input_linear(x))
+        ctx = F.relu(self.ctx_linear(ctx))
+        ctx = ctx.repeat(1, x.shape[1], 1)  # match shape for concat
+        ret = self.concat_linear(torch.concat([x, ctx], dim=-1))
         return ret
+    
+    
 def get_linear_scheduler(optimizer, start_epoch, end_epoch, start_lr, end_lr):
     def lr_func(epoch):
         if epoch <= start_epoch:

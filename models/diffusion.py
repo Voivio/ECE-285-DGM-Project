@@ -51,17 +51,24 @@ class VarianceSchedule(Module):
 
 class PointwiseNet(Module):
 
-    def __init__(self, point_dim, context_dim, residual):
+    def __init__(self, point_dim, context_dim, residual, layer_type="squash"):
         super().__init__()
         self.act = F.leaky_relu
         self.residual = residual
+
+        if layer_type == "squash":
+            layer = ConcatSquashLinear
+        else:
+            print("using non squash pointwise net.")
+            layer = ConcatLinear
+
         self.layers = ModuleList([
-            ConcatSquashLinear(3, 128, context_dim+3),
-            ConcatSquashLinear(128, 256, context_dim+3),
-            ConcatSquashLinear(256, 512, context_dim+3),
-            ConcatSquashLinear(512, 256, context_dim+3),
-            ConcatSquashLinear(256, 128, context_dim+3),
-            ConcatSquashLinear(128, 3, context_dim+3)
+            layer(3, 128, context_dim+3),
+            layer(128, 256, context_dim+3),
+            layer(256, 512, context_dim+3),
+            layer(512, 256, context_dim+3),
+            layer(256, 128, context_dim+3),
+            layer(128, 3, context_dim+3)
         ])
 
     def forward(self, x, beta, context):

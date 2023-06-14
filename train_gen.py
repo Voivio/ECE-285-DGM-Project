@@ -20,6 +20,8 @@ from evaluation import *
 parser = argparse.ArgumentParser()
 # Model arguments
 parser.add_argument('--model', type=str, default='flow', choices=['flow', 'gaussian'])
+parser.add_argument('--encoder', type=str, default='pointnet', choices=['pointnet', 'resnet'])
+parser.add_argument('--diffusion_layer_type', type=str, default='squash', choices=['squash', 'non-squash'])
 parser.add_argument('--latent_dim', type=int, default=256)
 parser.add_argument('--num_steps', type=int, default=100)
 parser.add_argument('--beta_1', type=float, default=1e-4)
